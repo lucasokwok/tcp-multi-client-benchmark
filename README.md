@@ -51,14 +51,20 @@ sudo dnf install gcc
 
 ### chat_example:
 
+```bash
 gcc -Wall -Wextra -g chat_server.c -o chat_server -pthread
 
 gcc -Wall -Wextra -g chat_client.c -o chat_client -pthread
+```
 
 Em um terminal:
 
+```bash
 ./chat_server 5000
+```
 
 Em outro terminal:
 
+```bash
 ./chat_client 127.0.0.1 5000
+```
