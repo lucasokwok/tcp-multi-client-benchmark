@@ -137,7 +137,7 @@ void *handle_client(void *arg) {
     snprintf(message, sizeof(message),
              "*** %s entrou no chat. ***\n",
              client->name);
-    broadcast(message, client);
+    // broadcast(message, client);
 
     printf("Usuario conectado: %s\n", client->name);
 
@@ -149,7 +149,7 @@ void *handle_client(void *arg) {
         snprintf(message, sizeof(message),
                  "%s: %s\n", client->name, buffer);
 
-        broadcast(message, client);
+        // broadcast(message, client);
     }
 
     if (n == -1)
@@ -173,7 +173,7 @@ void *handle_client(void *arg) {
         snprintf(message, sizeof(message),
                  "*** %s saiu do chat. ***\n",
                  client->name);
-        broadcast(message, NULL);
+        // broadcast(message, NULL);
     }
 
     printf("Usuario desconectado: %s\n", client->name);
