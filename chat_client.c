@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <pthread.h>
+#include <poll.h>
 #include <signal.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -13,7 +14,7 @@
 #define BUFFER_SIZE 1024
 
 int sockfd;
-pthread_mutex_t output_mutex = PTHREAD_MUTEX_INITIALIZER;
+// pthread_mutex_t output_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 int send_all(int fd, const char *data, size_t len) {
     size_t sent = 0;
@@ -37,57 +38,57 @@ int send_all(int fd, const char *data, size_t len) {
     return 0;
 }
 
-void *receive_messages(void *arg) {
-    char buffer[BUFFER_SIZE];
-    size_t pos = 0;
+// void *receive_messages(void *arg) {
+//     char buffer[BUFFER_SIZE];
+//     size_t pos = 0;
 
-    (void)arg;
+//     (void)arg;
 
-    while (1) {
-        char c;
-        ssize_t n = recv(sockfd, &c, 1, 0);
+//     while (1) {
+//         char c;
+//         ssize_t n = recv(sockfd, &c, 1, 0);
 
-        if (n == 0) {
-            pthread_mutex_lock(&output_mutex);
-            printf("\nConexao encerrada pelo servidor.\n");
-            fflush(stdout);
-            pthread_mutex_unlock(&output_mutex);
-            break;
-        }
+//         if (n == 0) {
+//             pthread_mutex_lock(&output_mutex);
+//             printf("\nConexao encerrada pelo servidor.\n");
+//             fflush(stdout);
+//             pthread_mutex_unlock(&output_mutex);
+//             break;
+//         }
 
-        if (n == -1) {
-            if (errno == EINTR)
-                continue;
+//         if (n == -1) {
+//             if (errno == EINTR)
+//                 continue;
 
-            pthread_mutex_lock(&output_mutex);
-            perror("recv");
-            pthread_mutex_unlock(&output_mutex);
-            break;
-        }
+//             pthread_mutex_lock(&output_mutex);
+//             perror("recv");
+//             pthread_mutex_unlock(&output_mutex);
+//             break;
+//         }
 
-        if (c == '\n') {
-            buffer[pos] = '\0';
+//         if (c == '\n') {
+//             buffer[pos] = '\0';
 
-            pthread_mutex_lock(&output_mutex);
-            printf("\r%s\n", buffer);
-            fflush(stdout);
-            pthread_mutex_unlock(&output_mutex);
+//             pthread_mutex_lock(&output_mutex);
+//             printf("\r%s\n", buffer);
+//             fflush(stdout);
+//             pthread_mutex_unlock(&output_mutex);
 
-            pos = 0;
-        } else if (c != '\r') {
-            if (pos < sizeof(buffer) - 1)
-                buffer[pos++] = c;
-        }
-    }
+//             pos = 0;
+//         } else if (c != '\r') {
+//             if (pos < sizeof(buffer) - 1)
+//                 buffer[pos++] = c;
+//         }
+//     }
 
-    return NULL;
-}
+//     return NULL;
+// }
 
 int main(int argc, char *argv[]) {
     struct sockaddr_in server_addr;
     char name[32];
-    char buffer[BUFFER_SIZE];
-    pthread_t receiver;
+    char buffer[BUFFER_SIZE] = "Mensagem padrao de teste TCP.\n";
+    char command;
 
     if (argc != 3) {
         fprintf(stderr, "Uso: %s <IP> <porta>\n", argv[0]);
@@ -146,53 +147,38 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
-    if (pthread_create(&receiver, NULL,
-                       receive_messages, NULL) != 0) {
-        fprintf(stderr, "Erro ao criar thread receptora.\n");
+    if (recv(sockfd, &command, 1, 0) != 1 || command != 'S') {
+        fprintf(stderr, "Erro aguardando o inicio do teste.\n");
         close(sockfd);
         return EXIT_FAILURE;
     }
 
-    printf("Conectado! Digite /quit para sair.\n");
-
+    struct pollfd server = {.fd = sockfd, .events = POLLIN};
     while (1) {
-        pthread_mutex_lock(&output_mutex);
-        printf("> ");
-        fflush(stdout);
-        pthread_mutex_unlock(&output_mutex);
-
-        if (fgets(buffer, sizeof(buffer), stdin) == NULL)
-            break;
-
-        if (strcmp(buffer, "/quit\n") == 0 ||
-            strcmp(buffer, "/quit") == 0) {
-            send_all(sockfd, "/quit\n", 6);
+        int ready = poll(&server, 1, 0);
+        if (ready == -1) {
+            perror("poll");
+            close(sockfd);
+            return EXIT_FAILURE;
+        }
+        if (ready > 0) {
+            if (recv(sockfd, &command, 1, 0) != 1 || command != 'E') {
+                fprintf(stderr, "Erro aguardando o fim do teste.\n");
+                close(sockfd);
+                return EXIT_FAILURE;
+            }
             break;
         }
 
-        size_t len = strlen(buffer);
-
-        if (len > 0 && buffer[len - 1] != '\n') {
-            int c;
-            while ((c = getchar()) != '\n' && c != EOF)
-                ;
-            fprintf(stderr, "Mensagem muito longa.\n");
-            continue;
-        }
-
-        if (send_all(sockfd, buffer, len) == -1) {
+        // Envia a mensagem fixa e os zeros restantes do buffer.
+        if (send_all(sockfd, buffer, sizeof(buffer)) == -1) {
             perror("send");
-            break;
+            close(sockfd);
+            return EXIT_FAILURE;
         }
     }
 
-    shutdown(sockfd, SHUT_RDWR);
-    pthread_join(receiver, NULL);
     close(sockfd);
-
-    pthread_mutex_destroy(&output_mutex);
-
-    printf("Cliente encerrado.\n");
 
     return EXIT_SUCCESS;
 }
