@@ -4,7 +4,7 @@ Lucas de Oliveira Kwok - 163939
 
 Felipe de Carvalho Frenhan - 147911
 
-Renata -
+Renata Moura Barreto - 163983
 
 Exercício UC Redes - Maximizar a taxa de transferência usando sockets TCP
 
