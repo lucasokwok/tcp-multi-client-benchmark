@@ -12,7 +12,8 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
-#define BUFFER_SIZE 1024
+// tamanho padrao do bloco de leitura (pode ser trocado pelo 4o argumento)
+#define DEFAULT_BLOCK_SIZE 65536
 #define MAX_CLIENTS 100
 
 typedef struct Client {
@@ -30,6 +31,7 @@ int num_clients = 0;
 pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 int duration;
+size_t block_size = DEFAULT_BLOCK_SIZE;
 struct timespec start_time;
 pthread_barrier_t start_barrier;
 
@@ -112,8 +114,14 @@ double elapsed_seconds(struct timespec now) {
 
 void *handle_client(void *arg) {
     Client *client = arg;
-    char buffer[BUFFER_SIZE];
     struct timespec now;
+
+    // bloco de leitura com o tamanho escolhido na linha de comando
+    char *buffer = malloc(block_size);
+    if (buffer == NULL) {
+        perror("malloc");
+        exit(EXIT_FAILURE);
+    }
 
     if (read_line(client->fd, client->name, sizeof(client->name)) <= 0) {
         fprintf(stderr, "Erro recebendo o nome do cliente.\n");
@@ -142,11 +150,12 @@ void *handle_client(void *arg) {
     if (send_all(client->fd, "S", 1) == -1) {
         perror("send inicio");
         client->failed = 1;
+        free(buffer);
         return NULL;
     }
 
     while (1) {
-        ssize_t n = recv(client->fd, buffer, sizeof(buffer), 0);
+        ssize_t n = recv(client->fd, buffer, block_size, 0);
         if (n == -1 && errno == EINTR)
             continue;
         clock_gettime(CLOCK_MONOTONIC, &now);
@@ -167,6 +176,7 @@ void *handle_client(void *arg) {
             client->bytes += (unsigned long long)n;
     }
 
+    free(buffer);
     return NULL;
 }
 
@@ -174,14 +184,23 @@ int main(int argc, char *argv[]) {
     int server_fd;
     struct sockaddr_in server_addr;
 
-    if (argc != 4) {
-        fprintf(stderr, "Uso: %s <porta> <clientes> <segundos>\n", argv[0]);
+    if (argc != 4 && argc != 5) {
+        fprintf(stderr, "Uso: %s <porta> <clientes> <segundos> [bloco_bytes]\n", argv[0]);
         return EXIT_FAILURE;
     }
 
     int port = atoi(argv[1]);
     int expected_clients = atoi(argv[2]);
     duration = atoi(argv[3]);
+
+    if (argc == 5) {
+        int value = atoi(argv[4]);
+        if (value <= 0) {
+            fprintf(stderr, "Tamanho de bloco invalido.\n");
+            return EXIT_FAILURE;
+        }
+        block_size = (size_t)value;
+    }
 
     signal(SIGPIPE, SIG_IGN);
 
@@ -300,7 +319,7 @@ int main(int argc, char *argv[]) {
 
     double seconds = elapsed_seconds(end_time);
     double mbps = (double)total_bytes * 8 / seconds / 1000000;
-    printf("%d,%d,%.6f,%llu,%.6f\n", expected_clients, BUFFER_SIZE, seconds, total_bytes, mbps);
+    printf("%d,%zu,%.6f,%llu,%.6f\n", expected_clients, block_size, seconds, total_bytes, mbps);
 
     return EXIT_SUCCESS;
 }

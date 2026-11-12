@@ -11,7 +11,8 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 
-#define BUFFER_SIZE 1024
+// tamanho padrao do bloco enviado (pode ser trocado pelo 4o argumento)
+#define DEFAULT_BLOCK_SIZE 65536
 
 int sockfd;
 // pthread_mutex_t output_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -86,15 +87,41 @@ int send_all(int fd, const char *data, size_t len) {
 
 int main(int argc, char *argv[]) {
     struct sockaddr_in server_addr;
-    char name[32];
     // a mensagem eh fixa para retirar a parte da digitacao
-    char buffer[BUFFER_SIZE] = "Mensagem padrao de teste TCP.\n";
+    const char message[] = "Mensagem padrao de teste TCP.\n";
+    size_t block_size = DEFAULT_BLOCK_SIZE;
     char command;
 
-    if (argc != 3) {
-        fprintf(stderr, "Uso: %s <IP> <porta>\n", argv[0]);
+    if (argc != 4 && argc != 5) {
+        fprintf(stderr, "Uso: %s <IP> <porta> <nome> [bloco_bytes]\n", argv[0]);
         return EXIT_FAILURE;
     }
+
+    // o nome vem pela linha de comando, sem digitacao
+    const char *name = argv[3];
+
+    if (name[0] == '\0' || strlen(name) > 31) {
+        fprintf(stderr, "Nome invalido (use de 1 a 31 caracteres).\n");
+        return EXIT_FAILURE;
+    }
+
+    if (argc == 5) {
+        int value = atoi(argv[4]);
+        if (value <= 0) {
+            fprintf(stderr, "Tamanho de bloco invalido.\n");
+            return EXIT_FAILURE;
+        }
+        block_size = (size_t)value;
+    }
+
+    // monta o bloco repetindo a mensagem ate preencher o tamanho escolhido
+    char *buffer = malloc(block_size);
+    if (buffer == NULL) {
+        perror("malloc");
+        return EXIT_FAILURE;
+    }
+    for (size_t i = 0; i < block_size; i++)
+        buffer[i] = message[i % (sizeof(message) - 1)];
 
     int port = atoi(argv[2]);
 
@@ -121,22 +148,6 @@ int main(int argc, char *argv[]) {
     if (connect(sockfd, (struct sockaddr *)&server_addr,
                 sizeof(server_addr)) == -1) {
         perror("connect");
-        close(sockfd);
-        return EXIT_FAILURE;
-    }
-
-    printf("Seu nome: ");
-
-    if (fgets(name, sizeof(name), stdin) == NULL) {
-        close(sockfd);
-        return EXIT_FAILURE;
-    }
-
-    name[strcspn(name, "\r\n")] = '\0';
-
-    if (name[0] == '\0' ||
-        strchr(name, '\n') != NULL) {
-        fprintf(stderr, "Nome invalido.\n");
         close(sockfd);
         return EXIT_FAILURE;
     }
@@ -173,13 +184,14 @@ int main(int argc, char *argv[]) {
         }
 
         // repete o bloco ate receber o sinal de parada
-        if (send_all(sockfd, buffer, sizeof(buffer)) == -1) {
+        if (send_all(sockfd, buffer, block_size) == -1) {
             perror("send");
             close(sockfd);
             return EXIT_FAILURE;
         }
     }
 
+    free(buffer);
     close(sockfd);
 
     return EXIT_SUCCESS;

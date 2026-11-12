@@ -26,22 +26,20 @@ def wait_for_server(server):
         raise RuntimeError(f"Erro ao iniciar servidor: {message}")
 
 
-def run_scenario(port, clients, duration):
+def run_scenario(port, clients, duration, block):
     processes = []
     try:
         server = subprocess.Popen(
-            [str(ROOT / "chat_server"), str(port), str(clients), str(duration)],
+            [str(ROOT / "chat_server"), str(port), str(clients), str(duration), str(block)],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         processes.append(server)
         wait_for_server(server)
 
         for number in range(1, clients + 1):
-            client = subprocess.Popen([str(ROOT / "chat_client"), "127.0.0.1", str(port)],
-                                       stdin=subprocess.PIPE, text=True)
+            # o nome e o tamanho do bloco sao passados por argumento
+            client = subprocess.Popen([str(ROOT / "chat_client"), "127.0.0.1", str(port),
+                                       f"cliente{number:02d}", str(block)])
             processes.append(client)
-            # o nome eh passado pela entrada do terminal
-            client.stdin.write(f"cliente{number:02d}\n")
-            client.stdin.close()
 
         result, errors = server.communicate(timeout=duration + 10)
         if server.returncode != 0:
@@ -62,6 +60,7 @@ def main():
     port = int(sys.argv[3]) if len(sys.argv) > 3 else 5000
     output = ROOT / sys.argv[4] if len(sys.argv) > 4 else (
         ROOT / "resultados" / datetime.now().strftime("%Y%m%d-%H%M%S-%f"))
+    block = int(sys.argv[5]) if len(sys.argv) > 5 else 65536
 
     for name in ("chat_server", "chat_client"):
         subprocess.run(["gcc", "-Wall", "-Wextra", "-O2", str(ROOT / f"{name}.c"),
@@ -77,7 +76,7 @@ def main():
         for clients in range(1, 11):
             for repetition in range(1, repetitions + 1):
                 print(f"Clientes: {clients}; repetição: {repetition}/{repetitions}", flush=True)
-                row = run_scenario(port, clients, duration)
+                row = run_scenario(port, clients, duration, block)
                 # grava a medicao recebida do servidor
                 writer.writerow([repetition, *row])
                 file.flush()

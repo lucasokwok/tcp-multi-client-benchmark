@@ -31,40 +31,86 @@ Modifique o cliente e o servidor para permitir a transmissão contínua de dados
 
     número de clientes simultâneos (1 a 10) versus throughput agregado máximo, em Mbps.
 
-## Dependências do projeto
+## Arquivos
 
-Para compilar no Linux, instale o GCC
+| Arquivo | Descrição |
+|---|---|
+| `chat_server.c` | Servidor: espera N clientes, libera o envio para todos ao mesmo tempo, soma os bytes recebidos por cada thread durante o tempo do teste e imprime o throughput agregado. |
+| `chat_client.c` | Cliente: envia continuamente blocos de tamanho fixo até o servidor sinalizar o fim do teste (sem digitação manual). |
+| `run_benchmarks.py` | Automatiza os experimentos: compila, roda de 1 a 10 clientes com N repetições e grava `resultados/<data-hora>/resultados.csv`. |
+| `analisar_resultados.py` | Lê o CSV e gera a tabela (`resumo.md`/`resumo.csv`) e o gráfico (`grafico.png`). |
+| `legacy/` | Versão original do chat, antes das modificações. |
+
+## Dependências
+
+O código usa APIs POSIX (`pthread`, sockets BSD, `poll`), então precisa de **Linux**. No Windows, use o WSL (`wsl --install -d Ubuntu`).
 
 No Ubuntu/Debian:
 
 ```bash
-sudo apt install gcc
+sudo apt install gcc python3 python3-matplotlib
 ```
 
 No Fedora:
 
 ```bash
-sudo dnf install gcc
+sudo dnf install gcc python3 python3-matplotlib
 ```
 
-## Exemplo de execução
-
-### chat_example:
+## Compilação
 
 ```bash
-gcc -Wall -Wextra -g chat_server.c -o chat_server -pthread
-
-gcc -Wall -Wextra -g chat_client.c -o chat_client -pthread
+gcc -Wall -Wextra -O2 chat_server.c -o chat_server -pthread
+gcc -Wall -Wextra -O2 chat_client.c -o chat_client -pthread
 ```
 
-Em um terminal:
+## Execução manual
 
 ```bash
-./chat_server 5000
+./chat_server <porta> <clientes> <segundos> [bloco_bytes]
+./chat_client <ip_servidor> <porta> <nome> [bloco_bytes]
 ```
 
-Em outro terminal:
+O tamanho de bloco padrão é 65536 bytes. Exemplo com 2 clientes durante 10 segundos (3 terminais):
 
 ```bash
-./chat_client 127.0.0.1 5000
+./chat_server 5000 2 10
+./chat_client 127.0.0.1 5000 cliente1
+./chat_client 127.0.0.1 5000 cliente2
+```
+
+O teste começa quando o último cliente se conecta. Ao final, o servidor imprime uma linha CSV:
+
+```
+clientes,bloco_bytes,duracao_segundos,bytes_recebidos,throughput_mbps
+```
+
+> A quantidade de clientes iniciados deve ser igual ao argumento `<clientes>` do servidor; caso contrário ele fica aguardando.
+
+## Experimentos automatizados
+
+```bash
+python3 run_benchmarks.py [duracao] [repeticoes] [porta] [pasta_saida] [bloco_bytes]
+```
+
+Valores padrão: 30 s, 5 repetições, porta 5000, bloco de 65536 bytes. Exemplos:
+
+```bash
+python3 run_benchmarks.py 5 1     # teste rápido (~1 min)
+python3 run_benchmarks.py 30 5    # rodada usada no relatório (~25 min)
+```
+
+## Tabela e gráfico
+
+```bash
+python3 analisar_resultados.py                       # rodada mais recente
+python3 analisar_resultados.py resultados/<pasta>    # rodada específica
+```
+
+## Cálculo do throughput agregado
+
+Cada thread do servidor acumula os bytes recebidos do seu cliente apenas enquanto o tempo decorrido desde o início sincronizado é menor que a duração do teste. Ao final, o servidor soma os bytes de todas as threads:
+
+```
+throughput (Mbps) = soma dos bytes recebidos × 8 / duração (s) / 1.000.000
 ```
