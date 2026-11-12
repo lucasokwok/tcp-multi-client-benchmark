@@ -39,6 +39,7 @@ def run_scenario(port, clients, duration):
             client = subprocess.Popen([str(ROOT / "chat_client"), "127.0.0.1", str(port)],
                                        stdin=subprocess.PIPE, text=True)
             processes.append(client)
+            # o nome eh passado pela entrada do terminal
             client.stdin.write(f"cliente{number:02d}\n")
             client.stdin.close()
 
@@ -72,10 +73,12 @@ def main():
         writer.writerow(["repeticao", "clientes", "bloco_bytes", "duracao_segundos",
                          "bytes_recebidos", "throughput_mbps"])
         file.flush()
+        # repete cada teste variando de 1 a 10 clientes
         for clients in range(1, 11):
             for repetition in range(1, repetitions + 1):
                 print(f"Clientes: {clients}; repetição: {repetition}/{repetitions}", flush=True)
                 row = run_scenario(port, clients, duration)
+                # grava a medicao recebida do servidor
                 writer.writerow([repetition, *row])
                 file.flush()
     print(f"Resultados: {output / 'resultados.csv'}")

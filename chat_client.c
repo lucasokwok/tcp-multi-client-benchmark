@@ -87,6 +87,7 @@ int send_all(int fd, const char *data, size_t len) {
 int main(int argc, char *argv[]) {
     struct sockaddr_in server_addr;
     char name[32];
+    // a mensagem eh fixa para retirar a parte da digitacao
     char buffer[BUFFER_SIZE] = "Mensagem padrao de teste TCP.\n";
     char command;
 
@@ -147,6 +148,7 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
+    // aguarda todos os clientes ficarem prontos para enviar
     if (recv(sockfd, &command, 1, 0) != 1 || command != 'S') {
         fprintf(stderr, "Erro aguardando o inicio do teste.\n");
         close(sockfd);
@@ -170,7 +172,7 @@ int main(int argc, char *argv[]) {
             break;
         }
 
-        // Envia a mensagem fixa e os zeros restantes do buffer.
+        // repete o bloco ate receber o sinal de parada
         if (send_all(sockfd, buffer, sizeof(buffer)) == -1) {
             perror("send");
             close(sockfd);

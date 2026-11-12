@@ -135,7 +135,7 @@ void *handle_client(void *arg) {
 
     fprintf(stderr, "Usuario conectado: %s\n", client->name);
 
-    // A primeira barreira prepara as threads; a segunda libera o envio.
+    // espera todos os clientes antes de liberar o envio
     pthread_barrier_wait(&start_barrier);
     pthread_barrier_wait(&start_barrier);
 
@@ -162,6 +162,7 @@ void *handle_client(void *arg) {
             }
             break;
         }
+        // conta apenas os bytes recebidos durante o teste
         if (elapsed_seconds(now) < duration)
             client->bytes += (unsigned long long)n;
     }
@@ -276,6 +277,7 @@ int main(int argc, char *argv[]) {
         current = current->next;
     }
 
+    // junta os resultados de cada thread
     unsigned long long total_bytes = 0;
     int failed = 0;
     while (clients != NULL) {
